@@ -121,9 +121,46 @@
             text-align: center;
             text-shadow: 0 0 5px #0f0, 0 0 10px #0f0, 0 0 15px #0f0, 0 0 20px #00f;
         }
+        #welcomeScreen {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 390px;
+            height: 70vh;
+            max-height: 844px;
+            background: black;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .lives-btn {
+            background: rgba(0, 100, 0, 0.5);
+            border-radius: 8px;
+            color: #0f0;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 16px;
+            padding: 15px;
+            margin: 10px 0;
+            width: 150px;
+            text-align: center;
+            user-select: none;
+            touch-action: manipulation;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
+    <div id="welcomeScreen">
+        <h1 class="glow-text" style="font-size: 18px; margin-bottom: 20px;">Welcome to Harris Arcades</h1>
+        <p class="glow-text" style="font-size: 14px; margin-bottom: 30px;">Please select the number of lives</p>
+        <div id="lives3" class="lives-btn">3 LIVES</div>
+        <div id="lives6" class="lives-btn">6 LIVES</div>
+        <div id="lives9" class="lives-btn">9 LIVES</div>
+    </div>
     <canvas id="gameCanvas" width="390" height="700"></canvas>
     <div id="controls">
         <div id="joystick">
@@ -171,6 +208,13 @@
         const joystick = document.getElementById('joystick');
         const joystickKnob = document.getElementById('joystick-knob');
         const fireBtn = document.getElementById('fireBtn');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const lives3Btn = document.getElementById('lives3');
+        const lives6Btn = document.getElementById('lives6');
+        const lives9Btn = document.getElementById('lives9');
+
+        // Game state
+        let gameStarted = false;
 
         // Audio setup
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -415,6 +459,12 @@
 
         // Initialize game
         function init() {
+            if (!gameStarted) {
+                // Clear canvas
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
             initStars();
             initInvaders();
             initBarriers();
@@ -422,6 +472,36 @@
             setupTouchControls();
             requestAnimationFrame(gameLoop);
         }
+
+        function startGame(livesSelected) {
+            lives = livesSelected;
+            gameStarted = true;
+            welcomeScreen.style.display = 'none';
+            canvas.style.display = 'block';
+            controls.style.display = 'flex';
+            initStars();
+            initInvaders();
+            initBarriers();
+            document.addEventListener('keydown', handleInput);
+            setupTouchControls();
+            requestAnimationFrame(gameLoop);
+        }
+
+        lives3Btn.addEventListener('click', () => startGame(3));
+        lives6Btn.addEventListener('click', () => startGame(6));
+        lives9Btn.addEventListener('click', () => startGame(9));
+        lives3Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startGame(3);
+        });
+        lives6Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startGame(6);
+        });
+        lives9Btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startGame(9);
+        });
 
         function initStars() {
             for (let i = 0; i < STAR_COUNT; i++) {
@@ -457,7 +537,7 @@
             barriers = [];
             const spacing = canvas.width / (BARRIER_COUNT + 1);
             for (let i = 0; i < BARRIER_COUNT; i++) {
-                const pixels = barrierSprite.map(row => [...row]); // Deep copy of barrier sprite
+                const pixels = barrierSprite.map(row => [...row]);
                 barriers.push({
                     x: spacing * (i + 1) - BARRIER_WIDTH / 2,
                     y: canvas.height - 150,
@@ -554,7 +634,6 @@
             const hitX = Math.floor((bulletX - barrier.x) / pixelW);
             const hitY = Math.floor((bulletY - barrier.y) / pixelH);
 
-            // Damage a 3x3 area around the hit point
             for (let dy = -1; dy <= 1; dy++) {
                 for (let dx = -1; dx <= 1; dx++) {
                     const px = hitX + dx;
@@ -578,34 +657,30 @@
                 if (pixelX >= 0 && pixelX < barrier.pixels[0].length && pixelY >= 0 && pixelY < barrier.pixels.length) {
                     if (barrier.pixels[pixelY][pixelX] === 1) {
                         damageBarrier(barrier, bulletCenterX, bulletCenterY);
-                        return true; // Bullet hits intact pixel
+                        return true;
                     }
-                    return false; // Bullet passes through hole
+                    return false;
                 }
             }
             return false;
         }
 
         function update(deltaTime) {
-            if (gameOver) return;
+            if (!gameStarted || gameOver) return;
 
-            // Update player
             player.x += (player.dx || 0) * deltaTime;
             player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
 
-            // Update bullets
             bullets.forEach(bullet => {
                 bullet.y += bullet.dy * deltaTime;
             });
             bullets = bullets.filter(b => b.y > 0 && b.y < canvas.height);
 
-            // Update explosions
             explosions.forEach(explosion => {
                 explosion.time += deltaTime;
             });
             explosions = explosions.filter(ex => ex.time < EXPLOSION_DURATION);
 
-            // Update invaders
             if (performance.now() / 1000 - lastStepTime > invaderStepTime) {
                 let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
                 invaders.forEach(inv => {
@@ -630,7 +705,6 @@
                 }
             }
 
-            // Update UFO
             ufoSpawnTime += deltaTime;
             if (!ufo && ufoSpawnTime > ufoInterval) {
                 ufo = {
@@ -659,16 +733,13 @@
                 }
             }
 
-            // Update stars
             stars.forEach(star => {
                 star.y += star.speed * deltaTime;
                 if (star.y > canvas.height) star.y -= canvas.height;
             });
 
-            // Collision detection
             bullets.forEach(bullet => {
                 let bulletHit = false;
-                // Check barrier collisions
                 for (let barrier of barriers) {
                     if (checkBarrierCollision(barrier, bullet)) {
                         bulletHit = true;
@@ -719,14 +790,12 @@
                 }
             });
 
-            // Check for level completion
             if (invaders.every(inv => !inv.alive)) {
                 level++;
                 initInvaders();
                 initBarriers();
             }
 
-            // Enemy bullets
             if (Math.random() < 0.01 * level) {
                 let aliveInvaders = invaders.filter(inv => inv.alive);
                 if (aliveInvaders.length > 0) {
@@ -764,7 +833,7 @@
         function drawBarrier(ctx, barrier) {
             const pixelW = barrier.width / barrier.pixels[0].length;
             const pixelH = barrier.height / barrier.pixels.length;
-            ctx.fillStyle = '#0f0';
+            ctx.fillStyle = '#00f'; // Changed to blue
             for (let sy = 0; sy < barrier.pixels.length; sy++) {
                 for (let sx = 0; sx < barrier.pixels[0].length; sx++) {
                     if (barrier.pixels[sy][sx]) {
@@ -775,16 +844,19 @@
         }
 
         function draw() {
+            if (!gameStarted) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw stars
             ctx.fillStyle = 'white';
             stars.forEach(star => {
                 ctx.fillRect(star.x, star.y, 2, 2);
             });
 
-            // Draw title and HUD
             ctx.font = '12px "Press Start 2P"';
             ctx.fillStyle = '#0f0';
             ctx.textAlign = 'center';
@@ -795,36 +867,29 @@
             ctx.fillText(`Score: ${score}`, 10, 80);
             ctx.fillText(`Level: ${level}`, 10, 100);
 
-            // Draw barriers
             barriers.forEach(barrier => drawBarrier(ctx, barrier));
 
-            // Draw player
             drawSprite(ctx, playerSprite, player.x, player.y, player.width, player.height, '#ff0');
 
-            // Draw invaders
             invaders.forEach(inv => {
                 if (inv.alive) {
                     drawSprite(ctx, inv.type.sprite[inv.frame], inv.x, inv.y, inv.width, inv.height, inv.type.color);
                 }
             });
 
-            // Draw UFO
             if (ufo) {
                 drawSprite(ctx, ufoSprite, ufo.x, ufo.y, ufo.width, ufo.height, '#f00');
             }
 
-            // Draw bullets
             ctx.fillStyle = 'white';
             bullets.forEach(bullet => {
                 ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
             });
 
-            // Draw explosions
             explosions.forEach(ex => {
                 drawSprite(ctx, explosionSprite, ex.x, ex.y, ex.width, ex.height, ex.color, true);
             });
 
-            // Draw game over
             if (gameOver) {
                 gameOverText.style.display = 'block';
                 gameOverText.style.left = `${canvas.offsetLeft + canvas.width / 2 - 80}px`;
@@ -835,7 +900,6 @@
         function resetGame() {
             score = 0;
             level = 1;
-            lives = 3;
             gameOver = false;
             bullets = [];
             explosions = [];
@@ -846,8 +910,11 @@
             }
             gameOverText.style.display = 'none';
             joystickKnob.style.left = '50%';
-            initInvaders();
-            initBarriers();
+            welcomeScreen.style.display = 'flex';
+            canvas.style.display = 'none';
+            controls.style.display = 'none';
+            gameStarted = false;
+            init();
         }
 
         function gameLoop(timestamp) {
@@ -861,14 +928,12 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Resume audio context on user interaction
         document.addEventListener('click', () => {
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
         });
 
-        // Handle game over tap to reset
         document.addEventListener('touchstart', (e) => {
             if (gameOver) {
                 resetGame();
